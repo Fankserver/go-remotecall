@@ -90,7 +90,7 @@ func (b *RCClientHandshake) Marshal() ([]byte, error) {
 	length += 1
 	n, _ = buf.WriteString(b.Password)
 	length += n
-	if length != (4 + len(b.Password)) {
+	if length != (5 + len(b.Password)) {
 		return nil, fmt.Errorf("invalid packet: packet length mismatch (%d)", length)
 	}
 	return buf.Bytes(), nil

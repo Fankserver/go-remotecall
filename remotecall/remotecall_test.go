@@ -114,4 +114,35 @@ func Test_RCClientHandshake_Marshal(t *testing.T) {
 	if !bytes.Equal(testBytes, normBytes) {
 		t.Errorf("Byte slice mismatch: % #x, want % #x", testBytes, normBytes)
 	}
+
+	// test invalid packet
+	testPkt.Header.MagicBytes = []byte{0x00, 0x00, 0x00}
+	testBytes, err = testPkt.Marshal()
+	if err == nil {
+		t.Errorf("Did not return error: want \"%s\"", "invalid packet header: packet length mismatch (5)")
+	}
+}
+
+func Test_NewRCServerHandshake(t *testing.T) {
+	testPkt := NewRCServerHandshake()
+
+	if testPkt.PacketType != 0x01 {
+		t.Errorf("PacketType = %d, want %d", testPkt.PacketType, 0x00)
+	}
+	if testPkt.Result != 0x00 {
+		t.Errorf("Result = %#x, want %#x", testPkt.Result, 0)
+	}
+}
+
+func Test_RCServerHandshake_Unmarshal(t *testing.T) {
+	testPkt := NewRCServerHandshake()
+
+	// reset
+	testPkt.PacketType = 0xFF
+	testPkt.Result = 0xFF
+
+	err := testPkt.Unmarshal([]byte{0x52, 0x43, 0x01, 0xFF, 0x01, 0x00})
+	if err != nil {
+		t.Errorf("Error while unmarshalling: %s", err.Error())
+	}
 }
