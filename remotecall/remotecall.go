@@ -53,21 +53,21 @@ func (b *RCHeader) Marshal() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-type RCClientHandshake struct {
+type RCHandshake struct {
 	Header     RCHeader
 	PacketType byte
 	Password   string
 }
 
-func NewRCClientHandshake() *RCClientHandshake {
-	var packet RCClientHandshake
+func NewRCHandshake() *RCHandshake {
+	var packet RCHandshake
 	packet.Header = *NewRCHeader()
 	packet.PacketType = 0x00
-	packet.Password = "default"
+	packet.Password = ""
 	return &packet
 }
 
-func (b *RCClientHandshake) Unmarshal(rawBytes []byte) error {
+func (b *RCHandshake) Unmarshal(rawBytes []byte) error {
 	err := b.Header.Unmarshal(rawBytes[:4])
 	if err != nil {
 		return err
@@ -77,7 +77,7 @@ func (b *RCClientHandshake) Unmarshal(rawBytes []byte) error {
 	return nil
 }
 
-func (b *RCClientHandshake) Marshal() ([]byte, error) {
+func (b *RCHandshake) Marshal() ([]byte, error) {
 	var buf bytes.Buffer
 	length := 0
 	wb, err := b.Header.Marshal()
@@ -96,21 +96,21 @@ func (b *RCClientHandshake) Marshal() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-type RCServerHandshake struct {
+type RCHandshakeResponse struct {
 	Header     RCHeader
 	PacketType byte
 	Result     byte
 }
 
-func NewRCServerHandshake() *RCServerHandshake {
-	var packet RCServerHandshake
+func NewRCHandshakeResponse() *RCHandshakeResponse {
+	var packet RCHandshakeResponse
 	packet.Header = *NewRCHeader()
 	packet.PacketType = 0x01
 	packet.Result = 0x00
 	return &packet
 }
 
-func (b *RCServerHandshake) Unmarshal(rawBytes []byte) error {
+func (b *RCHandshakeResponse) Unmarshal(rawBytes []byte) error {
 	err := b.Header.Unmarshal(rawBytes[:4])
 	if err != nil {
 		return err
@@ -120,7 +120,7 @@ func (b *RCServerHandshake) Unmarshal(rawBytes []byte) error {
 	return nil
 }
 
-func (b *RCServerHandshake) Marshal() ([]byte, error) {
+func (b *RCHandshakeResponse) Marshal() ([]byte, error) {
 	var buf bytes.Buffer
 	length := 0
 	wb, err := b.Header.Marshal()
@@ -139,21 +139,108 @@ func (b *RCServerHandshake) Marshal() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-type RCClientQuery struct {
+type RCQueryContentLength struct {
+	Header        RCHeader
+	PacketType    byte
+	ContentLength uint16
+}
+
+func NewRCQueryContentLength() *RCQueryContentLength {
+	var packet RCQueryContentLength
+	packet.Header = *NewRCHeader()
+	packet.PacketType = 0x10
+	packet.ContentLength = 0
+	return &packet
+}
+
+func (b *RCQueryContentLength) Unmarshal(rawBytes []byte) error {
+	err := b.Header.Unmarshal(rawBytes[:4])
+	if err != nil {
+		return err
+	}
+	b.PacketType = rawBytes[4:5][0]
+	b.ContentLength = binary.LittleEndian.Uint16(rawBytes[5:7])
+	return nil
+}
+
+func (b *RCQueryContentLength) Marshal() ([]byte, error) {
+	var buf bytes.Buffer
+	length := 0
+	wb, err := b.Header.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	n, _ := buf.Write(wb)
+	length += n
+	buf.WriteByte(b.PacketType)
+	length += 1
+	tmp := make([]byte, 2)
+	binary.LittleEndian.PutUint16(tmp, b.ContentLength)
+	length += n
+	if length != 7 {
+		return nil, fmt.Errorf("invalid packet: packet length too small (%d)", length)
+	}
+	return buf.Bytes(), nil
+}
+
+type RCContentLengthResponse struct {
+	Header     RCHeader
+	PacketType byte
+	Result     byte
+}
+
+func NewRCContentLengthResponse() *RCContentLengthResponse {
+	var packet RCContentLengthResponse
+	packet.Header = *NewRCHeader()
+	packet.PacketType = 0x11
+	packet.Result = 0x00
+	return &packet
+}
+
+func (b *RCContentLengthResponse) Unmarshal(rawBytes []byte) error {
+	err := b.Header.Unmarshal(rawBytes[:4])
+	if err != nil {
+		return err
+	}
+	b.PacketType = rawBytes[4:5][0]
+	b.Result = rawBytes[5:6][0]
+	return nil
+}
+
+func (b *RCContentLengthResponse) Marshal() ([]byte, error) {
+	var buf bytes.Buffer
+	length := 0
+	wb, err := b.Header.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	n, _ := buf.Write(wb)
+	length += n
+	buf.WriteByte(b.PacketType)
+	length += 1
+	buf.WriteByte(b.Result)
+	length += 1
+	if length != 6 {
+		return nil, fmt.Errorf("invalid packet: packet length too small (%d)", length)
+	}
+	return buf.Bytes(), nil
+}
+
+type RCQuery struct {
 	Header     RCHeader
 	PacketType byte
 	Content    string
 }
 
-func NewRCClientQuery() *RCClientQuery {
-	var packet RCClientQuery
+func NewRCQuery() *RCQuery {
+	var packet RCQuery
 	packet.Header = *NewRCHeader()
-	packet.PacketType = 0x10
+	packet.PacketType = 0x12
 	packet.Content = ""
 	return &packet
 }
 
-func (b *RCClientQuery) Unmarshal(rawBytes []byte) error {
+func (b *RCQuery) Unmarshal(rawBytes []byte) error {
 	err := b.Header.Unmarshal(rawBytes[:4])
 	if err != nil {
 		return err
@@ -163,7 +250,7 @@ func (b *RCClientQuery) Unmarshal(rawBytes []byte) error {
 	return nil
 }
 
-func (b *RCClientQuery) Marshal() ([]byte, error) {
+func (b *RCQuery) Marshal() ([]byte, error) {
 	var buf bytes.Buffer
 	length := 0
 	wb, err := b.Header.Marshal()
@@ -182,21 +269,21 @@ func (b *RCClientQuery) Marshal() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-type RCServerQuery struct {
+type RCQueryResponse struct {
 	Header     RCHeader
 	PacketType byte
 	QueryID    uint16
 }
 
-func NewRCServerQuery() *RCServerQuery {
-	var packet RCServerQuery
+func NewRCQueryResponse() *RCQueryResponse {
+	var packet RCQueryResponse
 	packet.Header = *NewRCHeader()
-	packet.PacketType = 0x11
+	packet.PacketType = 0x13
 	packet.QueryID = 0
 	return &packet
 }
 
-func (b *RCServerQuery) Unmarshal(rawBytes []byte) error {
+func (b *RCQueryResponse) Unmarshal(rawBytes []byte) error {
 	err := b.Header.Unmarshal(rawBytes[:4])
 	if err != nil {
 		return err
@@ -206,7 +293,7 @@ func (b *RCServerQuery) Unmarshal(rawBytes []byte) error {
 	return nil
 }
 
-func (b *RCServerQuery) Marshal() ([]byte, error) {
+func (b *RCQueryResponse) Marshal() ([]byte, error) {
 	var buf bytes.Buffer
 	length := 0
 	wb, err := b.Header.Marshal()
@@ -226,23 +313,23 @@ func (b *RCServerQuery) Marshal() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-type RCServerQueryResult struct {
+type RCQueryResultResponse struct {
 	Header     RCHeader
 	PacketType byte
 	QueryID    uint16
 	Content    string
 }
 
-func NewRCServerQueryResult() *RCServerQueryResult {
-	var packet RCServerQueryResult
+func NewRCQueryResultResponse() *RCQueryResultResponse {
+	var packet RCQueryResultResponse
 	packet.Header = *NewRCHeader()
-	packet.PacketType = 0x12
+	packet.PacketType = 0x14
 	packet.QueryID = 0
 	packet.Content = ""
 	return &packet
 }
 
-func (b *RCServerQueryResult) Unmarshal(rawBytes []byte) error {
+func (b *RCQueryResultResponse) Unmarshal(rawBytes []byte) error {
 	err := b.Header.Unmarshal(rawBytes[:4])
 	if err != nil {
 		return err
@@ -253,7 +340,7 @@ func (b *RCServerQueryResult) Unmarshal(rawBytes []byte) error {
 	return nil
 }
 
-func (b *RCServerQueryResult) Marshal() ([]byte, error) {
+func (b *RCQueryResultResponse) Marshal() ([]byte, error) {
 	var buf bytes.Buffer
 	length := 0
 	wb, err := b.Header.Marshal()
