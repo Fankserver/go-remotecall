@@ -79,7 +79,7 @@ Reconnect:
 					packet := remotecall.NewRCHandshakeResponse()
 					err := packet.Unmarshal(buf[:totalBytes])
 					if err == nil {
-						u.Err <- fmt.Errorf("%v", packet)
+						u.Err <- fmt.Errorf("%# x", buf[:totalBytes])
 						if packet.Result == 0x00 {
 							u.Err <- fmt.Errorf("logged in")
 						} else if packet.Result == 0x01 {

@@ -8,7 +8,6 @@ import (
 	"go-remotecall/tcp"
 	"io/ioutil"
 	"log"
-	"time"
 )
 
 func main() {
@@ -40,7 +39,7 @@ func main() {
 		select {
 		case e := <-client.Err:
 			ct.ChangeColor(ct.Cyan, true, ct.Black, false)
-			log.Println(time.Now().String() + " " + e.Error())
+			log.Println(e.Error())
 			ct.ResetColor()
 		}
 	}
