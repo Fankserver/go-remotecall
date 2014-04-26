@@ -176,9 +176,10 @@ func (b *RCQueryContentLength) Marshal() ([]byte, error) {
 	length += 1
 	tmp := make([]byte, 2)
 	binary.LittleEndian.PutUint16(tmp, b.ContentLength)
+	n, err = buf.Write(tmp)
 	length += n
 	if length != 7 {
-		return nil, fmt.Errorf("invalid packet: packet length too small (%d)", length)
+		return nil, fmt.Errorf("invalid packet: packet length mismatch (%d) (%# x)", length, buf.Bytes())
 	}
 	return buf.Bytes(), nil
 }
@@ -263,8 +264,8 @@ func (b *RCQuery) Marshal() ([]byte, error) {
 	length += 1
 	n, _ = buf.WriteString(b.Content)
 	length += n
-	if length != (4 + len(b.Content)) {
-		return nil, fmt.Errorf("invalid packet: packet length too small (%d)", length)
+	if length != (5 + len(b.Content)) {
+		return nil, fmt.Errorf("invalid packet: packet length mismatch (%d) (%# x) (%d)", length, buf.Bytes(), len(b.Content))
 	}
 	return buf.Bytes(), nil
 }

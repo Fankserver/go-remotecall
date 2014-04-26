@@ -30,7 +30,7 @@ func NewTCPClient(cfg *Config) *TCPClient {
 }
 
 func (u *TCPClient) Listen() {
-	buf := make([]byte, 4096)
+	buf := make([]byte, 1024)
 	var header remotecall.RCHeader
 
 Reconnect:
@@ -50,7 +50,10 @@ Reconnect:
 			continue
 		}
 
-		u.con.SetReadDeadline(time.Now().Add(15 * time.Second))
+		//u.con.SetNoDelay(false)
+		u.con.SetWriteBuffer(512)
+
+		//u.con.SetReadDeadline(time.Now().Add(15 * time.Second)) // REMOVE
 
 		// login
 		newPacket := remotecall.NewRCHandshake()
@@ -62,20 +65,22 @@ Reconnect:
 
 			totalBytes, err := u.con.Read(buf[:])
 			log.Printf("READ %d bytes\n", totalBytes)
-			u.con.SetReadDeadline(time.Now().Add(60 * time.Second))
+			//log.Printf("%# x\n", buf)
+			//u.con.SetReadDeadline(time.Now().Add(60 * time.Second)) // REMOVE
 			if err != nil {
 				u.Err <- err
 				u.con.Close()
+				time.Sleep(15 * time.Second)
 				continue Reconnect
 			}
 
 			err = header.Unmarshal(buf[:4])
 			if err == nil {
 				packetType := buf[4:5][0]
-				log.Printf("%d", packetType)
+				log.Printf("PACKET TYPE %d", packetType)
 				switch {
 				case packetType == 0x01:
-					// RC Server Handshake Response
+					// RC Handshake Response
 					packet := remotecall.NewRCHandshakeResponse()
 					err := packet.Unmarshal(buf[:totalBytes])
 					if err == nil {
@@ -90,6 +95,33 @@ Reconnect:
 							return
 						}
 					}
+				case packetType == 0x11:
+					// RC Query Content Length Response
+					packet := remotecall.NewRCContentLengthResponse()
+					err := packet.Unmarshal(buf[:totalBytes])
+					if err == nil {
+						u.Err <- fmt.Errorf("%# x", buf[:totalBytes])
+						if packet.Result == 0x00 {
+							u.Err <- fmt.Errorf("content length ok")
+						} else if packet.Result == 0x01 {
+							u.Err <- fmt.Errorf("content length too short")
+							return
+						} else if packet.Result == 0x02 {
+							u.Err <- fmt.Errorf("content length too long")
+							return
+						} else if packet.Result == 0x03 {
+							u.Err <- fmt.Errorf("already waiting for content")
+							return
+						}
+					}
+				case packetType == 0x13:
+					// RC Query Response
+					packet := remotecall.NewRCQueryResponse()
+					err := packet.Unmarshal(buf[:totalBytes])
+					if err == nil {
+						u.Err <- fmt.Errorf("%# x", buf[:totalBytes])
+						u.Err <- fmt.Errorf("Query ID: %d", packet.QueryID)
+					}
 				}
 			}
 		}
@@ -102,11 +134,12 @@ func (u *TCPClient) ProcessPendingPackets() {
 		case p := <-u.Out:
 			bytes, err := p.Marshal()
 			if err == nil {
-				log.Printf("% #x\n", bytes)
+				//log.Printf("% #x\n", bytes)
 				_, err := u.con.Write(bytes)
 				if err != nil {
 					u.Err <- err
 				}
+				//log.Printf("Sent %d byte\n", n)
 			} else {
 				u.Err <- err
 			}
