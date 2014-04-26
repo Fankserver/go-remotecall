@@ -1,4 +1,4 @@
 go-remotecall
 =============
 
-go-remotecall is an ArmaRemoteCall protocol implementation
+go-remotecall is an [Arma3-RemoteCall](https://github.com/Fankserver/ArmA3-RemoteCall) protocol implementation written in Go
