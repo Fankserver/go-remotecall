@@ -10,7 +10,6 @@ import (
 	"go-remotecall/tcp"
 	"io/ioutil"
 	"log"
-	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -92,39 +91,12 @@ func console(t *tcp.TCPClient) {
 					return
 				}
 				content := string(bytes)
-
-				byteToSend := len(content)
-				iterations := math.Ceil(float64(byteToSend) / float64(507))
-
-				log.Printf("bytesToSend: %d iterations: %f", byteToSend, iterations)
-				it := int(iterations)
-
-				newPacket1 := remotecall.NewRCQueryContentLength()
-				newPacket1.ContentLength = uint16(byteToSend)
-				t.Out <- newPacket1
-
-				left, right := 0, 0
-				for i := 1; i <= it; i++ {
-					newPacket := remotecall.NewRCQuery()
-
-					left = (i - 1) * 507
-					right = (i * 507)
-
-					if i == it {
-						newPacket.Content = content[left:]
-						//log.Printf("%d %s\n", i, content[left:])
-					} else {
-						newPacket.Content = content[left:right]
-						//log.Printf("%d %s\n", i, content[left:right])
-					}
-
-					// debugging
-					// func WriteFile(filename string, data []byte, perm os.FileMode) error
-					//ioutil.WriteFile(fmt.Sprintf("packet_%i_", ...), data, perm)
-
-					t.Out <- newPacket
-				}
+				go t.SendContent(&content)
 			}
+		} else if strings.HasPrefix(line, "cc") {
+			line, _ := reader.ReadString('\n')
+
+			go t.SendContent(&line)
 		}
 	}
 }

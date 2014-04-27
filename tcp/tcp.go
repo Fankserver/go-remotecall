@@ -3,17 +3,19 @@ package tcp
 import (
 	"fmt"
 	"go-remotecall/remotecall"
-	"log"
+	//"log"
+	"math"
 	"net"
 	"time"
 )
 
 type TCPClient struct {
-	con    *net.TCPConn
-	Err    chan error               // error channel
-	Out    chan remotecall.RCPacket // packet channel
-	server *net.TCPAddr
-	cfg    *Config
+	con             *net.TCPConn
+	Err             chan error               // error channel
+	Out             chan remotecall.RCPacket // packet channel
+	ContentResponse chan error               // content query channel
+	server          *net.TCPAddr
+	cfg             *Config
 }
 
 type Config struct {
@@ -23,9 +25,10 @@ type Config struct {
 
 func NewTCPClient(cfg *Config) *TCPClient {
 	return &TCPClient{
-		Err: make(chan error),
-		Out: make(chan remotecall.RCPacket),
-		cfg: cfg,
+		Err:             make(chan error, 10),
+		Out:             make(chan remotecall.RCPacket, 20),
+		ContentResponse: make(chan error),
+		cfg:             cfg,
 	}
 }
 
@@ -50,10 +53,9 @@ Reconnect:
 			continue
 		}
 
-		//u.con.SetNoDelay(false)
 		u.con.SetWriteBuffer(512)
 
-		//u.con.SetReadDeadline(time.Now().Add(15 * time.Second)) // REMOVE
+		u.con.SetReadDeadline(time.Now().Add(15 * time.Second))
 
 		// login
 		newPacket := remotecall.NewRCHandshake()
@@ -64,9 +66,9 @@ Reconnect:
 		for {
 
 			totalBytes, err := u.con.Read(buf[:])
-			log.Printf("READ %d bytes\n", totalBytes)
+			//log.Printf("READ %d bytes\n", totalBytes)
 			//log.Printf("%# x\n", buf)
-			//u.con.SetReadDeadline(time.Now().Add(60 * time.Second)) // REMOVE
+			u.con.SetReadDeadline(time.Now().Add(60 * time.Second))
 			if err != nil {
 				u.Err <- err
 				u.con.Close()
@@ -77,14 +79,14 @@ Reconnect:
 			err = header.Unmarshal(buf[:4])
 			if err == nil {
 				packetType := buf[4:5][0]
-				log.Printf("PACKET TYPE %d", packetType)
+				//log.Printf("PACKET TYPE %d", packetType)
 				switch {
 				case packetType == 0x01:
 					// RC Handshake Response
 					packet := remotecall.NewRCHandshakeResponse()
 					err := packet.Unmarshal(buf[:totalBytes])
 					if err == nil {
-						u.Err <- fmt.Errorf("%# x", buf[:totalBytes])
+						//u.Err <- fmt.Errorf("%# x", buf[:totalBytes])
 						if packet.Result == 0x00 {
 							u.Err <- fmt.Errorf("logged in")
 						} else if packet.Result == 0x01 {
@@ -100,17 +102,20 @@ Reconnect:
 					packet := remotecall.NewRCContentLengthResponse()
 					err := packet.Unmarshal(buf[:totalBytes])
 					if err == nil {
-						u.Err <- fmt.Errorf("%# x", buf[:totalBytes])
+						//u.Err <- fmt.Errorf("%# x", buf[:totalBytes])
 						if packet.Result == 0x00 {
-							u.Err <- fmt.Errorf("content length ok")
+							u.Err <- nil // content length ok
 						} else if packet.Result == 0x01 {
-							u.Err <- fmt.Errorf("content length too short")
+							u.ContentResponse <- fmt.Errorf("content length too short")
 							return
 						} else if packet.Result == 0x02 {
-							u.Err <- fmt.Errorf("content length too long")
+							u.ContentResponse <- fmt.Errorf("content length too long")
 							return
 						} else if packet.Result == 0x03 {
-							u.Err <- fmt.Errorf("already waiting for content")
+							u.ContentResponse <- fmt.Errorf("already waiting for content")
+							return
+						} else {
+							u.ContentResponse <- fmt.Errorf("unknown error")
 							return
 						}
 					}
@@ -119,7 +124,7 @@ Reconnect:
 					packet := remotecall.NewRCQueryResponse()
 					err := packet.Unmarshal(buf[:totalBytes])
 					if err == nil {
-						u.Err <- fmt.Errorf("%# x", buf[:totalBytes])
+						//u.Err <- fmt.Errorf("%# x", buf[:totalBytes])
 						u.Err <- fmt.Errorf("Query ID: %d", packet.QueryID)
 					}
 				}
@@ -144,5 +149,46 @@ func (u *TCPClient) ProcessPendingPackets() {
 				u.Err <- err
 			}
 		}
+	}
+}
+
+func (t *TCPClient) SendContent(content *string) {
+	contentLength := len(*content)
+	iterations := math.Ceil(float64(contentLength) / float64(507))
+
+	// query content length
+	// and wait for response
+	clQuery := remotecall.NewRCQueryContentLength()
+	clQuery.ContentLength = uint16(contentLength)
+	t.Out <- clQuery
+
+	select {
+	case err := <-t.ContentResponse:
+		if err != nil {
+			t.Err <- err
+			return
+		}
+	case <-time.After(10 * time.Second):
+		// timeout
+		t.Err <- fmt.Errorf("no query length response received for 10 seconds")
+		return
+	}
+
+	left, right := 0, 0
+	for i := 1; i <= int(iterations); i++ {
+		newPacket := remotecall.NewRCQuery()
+
+		left = (i - 1) * 507
+		right = (i * 507)
+
+		if i == int(iterations) {
+			newPacket.Content = (*content)[left:]
+			//log.Printf("%d %s\n", i, content[left:])
+		} else {
+			newPacket.Content = (*content)[left:right]
+			//log.Printf("%d %s\n", i, content[left:right])
+		}
+
+		t.Out <- newPacket
 	}
 }
