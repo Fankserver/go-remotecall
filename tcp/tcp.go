@@ -54,6 +54,8 @@ Reconnect:
 		}
 
 		u.con.SetWriteBuffer(512)
+		//u.con.SetKeepAlive(true)
+		//u.con.SetKeepAlivePeriod(30 * time.Second)
 
 		u.con.SetReadDeadline(time.Now().Add(15 * time.Second))
 
@@ -68,7 +70,7 @@ Reconnect:
 			totalBytes, err := u.con.Read(buf[:])
 			//log.Printf("READ %d bytes\n", totalBytes)
 			//log.Printf("%# x\n", buf)
-			u.con.SetReadDeadline(time.Now().Add(60 * time.Second))
+			u.con.SetReadDeadline(time.Now().Add(300 * time.Second))
 			if err != nil {
 				u.Err <- err
 				u.con.Close()
@@ -104,7 +106,7 @@ Reconnect:
 					if err == nil {
 						//u.Err <- fmt.Errorf("%# x", buf[:totalBytes])
 						if packet.Result == 0x00 {
-							u.Err <- nil // content length ok
+							u.ContentResponse <- nil // content length ok
 						} else if packet.Result == 0x01 {
 							u.ContentResponse <- fmt.Errorf("content length too short")
 							return
@@ -124,7 +126,7 @@ Reconnect:
 					packet := remotecall.NewRCQueryResponse()
 					err := packet.Unmarshal(buf[:totalBytes])
 					if err == nil {
-						//u.Err <- fmt.Errorf("%# x", buf[:totalBytes])
+						u.Err <- fmt.Errorf("%# x", buf[:totalBytes])
 						u.Err <- fmt.Errorf("Query ID: %d", packet.QueryID)
 					}
 				}
@@ -152,9 +154,13 @@ func (u *TCPClient) ProcessPendingPackets() {
 	}
 }
 
-func (t *TCPClient) SendContent(content *string) {
-	contentLength := len(*content)
+func (t *TCPClient) SendContent(c string) {
+	content := c
+	contentLength := len(content)
 	iterations := math.Ceil(float64(contentLength) / float64(507))
+	it := int(iterations)
+
+	//log.Printf("%d %f %d", contentLength, iterations, it)
 
 	// query content length
 	// and wait for response
@@ -168,27 +174,27 @@ func (t *TCPClient) SendContent(content *string) {
 			t.Err <- err
 			return
 		}
-	case <-time.After(10 * time.Second):
+		/*case <-time.After(10 * time.Second):
 		// timeout
 		t.Err <- fmt.Errorf("no query length response received for 10 seconds")
-		return
+		return*/
 	}
 
 	left, right := 0, 0
-	for i := 1; i <= int(iterations); i++ {
+	for i := 1; i <= it; i++ {
 		newPacket := remotecall.NewRCQuery()
 
 		left = (i - 1) * 507
 		right = (i * 507)
 
-		if i == int(iterations) {
-			newPacket.Content = (*content)[left:]
+		if i == it {
+			newPacket.Content = content[left:]
 			//log.Printf("%d %s\n", i, content[left:])
 		} else {
-			newPacket.Content = (*content)[left:right]
+			newPacket.Content = content[left:right]
 			//log.Printf("%d %s\n", i, content[left:right])
 		}
-
+		//log.Printf("%s\n", newPacket.Content)
 		t.Out <- newPacket
 	}
 }
