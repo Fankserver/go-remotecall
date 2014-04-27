@@ -1,0 +1,1 @@
+[["Hello World! This is Arma3-RemoteCall."],"BIS_fnc_guiMessage",true,false,false] spawn BIS_fnc_MP;
