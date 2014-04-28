@@ -53,7 +53,8 @@ Reconnect:
 			continue
 		}
 
-		u.con.SetWriteBuffer(512)
+		u.con.SetWriteBuffer(1024)
+		u.con.SetReadBuffer(1024)
 		//u.con.SetKeepAlive(true)
 		//u.con.SetKeepAlivePeriod(30 * time.Second)
 
@@ -157,7 +158,7 @@ func (u *TCPClient) ProcessPendingPackets() {
 func (t *TCPClient) SendContent(c string) {
 	content := c
 	contentLength := len(content)
-	iterations := math.Ceil(float64(contentLength) / float64(507))
+	iterations := math.Ceil(float64(contentLength) / float64(1024-5))
 	it := int(iterations)
 
 	//log.Printf("%d %f %d", contentLength, iterations, it)
@@ -184,8 +185,8 @@ func (t *TCPClient) SendContent(c string) {
 	for i := 1; i <= it; i++ {
 		newPacket := remotecall.NewRCQuery()
 
-		left = (i - 1) * 507
-		right = (i * 507)
+		left = (i - 1) * (1024 - 5)
+		right = (i * (1024 - 5))
 
 		if i == it {
 			newPacket.Content = content[left:]
