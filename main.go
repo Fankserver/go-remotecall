@@ -91,10 +91,7 @@ func console(t *tcp.TCPClient) {
 					return
 				}
 				content := string(bytes)
-				for {
-					t.SendContent(content)
-				}
-
+				t.SendContent(content)
 			}
 		} else if strings.HasPrefix(line, "cc") {
 			line, _ := reader.ReadString('\n')
